@@ -1,5 +1,7 @@
 import React, { useReducer, useContext } from 'react';
-import { ScreenContext } from '../screen/screenContext';
+import { Alert } from 'react-native';
+import { TodoContext } from './todoContext';
+import { todoReducer } from './todoReducer';
 import {
    ADD_TODO,
    REMOVE_TODO,
@@ -10,9 +12,8 @@ import {
    CLEAR_ERROR,
    FETCH_TODOS,
 } from '../types';
-import { TodoContext } from './todoContext';
-import { todoReducer } from './todoReducer';
-import { Alert } from 'react-native';
+import { ScreenContext } from '../screen/screenContext';
+import { Http } from '../../http';
 
 export const TodoState = ({ children }) => {
    const initialState = {
@@ -22,18 +23,21 @@ export const TodoState = ({ children }) => {
    };
    const { changeScreen } = useContext(ScreenContext);
    const [state, dispatch] = useReducer(todoReducer, initialState);
+
    const addTodo = async (title) => {
-      const response = await fetch(
-         'https://rn-todo-app-9fa44-default-rtdb.europe-west1.firebasedatabase.app/todos.json',
-         {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title }),
-         }
-      );
-      const data = await response.json();
-      dispatch({ type: ADD_TODO, title, id: data.name });
+      clearError();
+      try {
+         const data = await Http.post(
+            'https://rn-todo-app-9fa44-default-rtdb.europe-west1.firebasedatabase.app/todos.json',
+            { title }
+         );
+         dispatch({ type: ADD_TODO, title, id: data.name });
+         // console.log('Post data', data.name);
+      } catch (e) {
+         showError('Что-то пошло не так...');
+      }
    };
+
    const removeTodo = (id) => {
       const todo = state.todos.find((t) => t.id === id);
       Alert.alert(
@@ -49,12 +53,8 @@ export const TodoState = ({ children }) => {
                style: 'destructive',
                onPress: async () => {
                   changeScreen(null);
-                  await fetch(
-                     `https://rn-todo-app-9fa44-default-rtdb.europe-west1.firebasedatabase.app/todos/${id}.json`,
-                     {
-                        method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json' },
-                     }
+                  await Http.delete(
+                     `https://rn-todo-app-9fa44-default-rtdb.europe-west1.firebasedatabase.app/todos/${id}.json`
                   );
                   dispatch({ type: REMOVE_TODO, id });
                },
@@ -63,21 +63,17 @@ export const TodoState = ({ children }) => {
          { cancelable: false }
       );
    };
+
    const fetchTodos = async () => {
       showLoader();
       clearError();
       try {
-         const response = await fetch(
-            'https://rn-todo-app-9fa44-default-rtdb.europe-west1.firebasedatabase.app/todos.json',
-            {
-               method: 'GET', // по умолчанию - можно не указывать
-               headers: { 'Content-Type': 'application/json' },
-            }
+         const data = await Http.get(
+            'https://rn-todo-app-9fa44-default-rtdb.europe-west1.firebasedatabase.app/todos.json'
          );
-         const data = await response.json();
          // console.log('Fetch data', data);
          const todos = Object.keys(data).map((key) => ({ ...data[key], id: key }));
-         // setTimeout(() => dispatch({ type: FETCH_TODOS, todos }), 5000);
+         // console.log('Fetch todos', todos);
          dispatch({ type: FETCH_TODOS, todos });
       } catch (e) {
          showError('Что-то пошло не так, попробуйте снова.');
@@ -86,16 +82,13 @@ export const TodoState = ({ children }) => {
          hideLoader();
       }
    };
+
    const updateTodo = async (id, title) => {
       clearError();
       try {
-         await fetch(
+         await Http.patch(
             `https://rn-todo-app-9fa44-default-rtdb.europe-west1.firebasedatabase.app/todos/${id}.json`,
-            {
-               method: 'PATCH',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ title }),
-            }
+            { title }
          );
          dispatch({ type: UPDATE_TODO, id, title });
       } catch {
